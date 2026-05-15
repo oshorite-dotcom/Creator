@@ -1,0 +1,17 @@
+{
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "git.postCommitCommand": "push",
+  "scm.showActionButton": false,
+  "workbench.editor.enablePreview": false,
+  "workbench.startupEditor": "none",
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false,
+  "chat.tools.terminal.autoApprove": {
+    "/^git push --dry-run origin main$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

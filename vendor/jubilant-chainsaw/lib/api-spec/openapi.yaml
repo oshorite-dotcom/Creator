@@ -1,0 +1,1260 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: gemini
+    description: Gemini AI chat and image operations
+  - name: tutor
+    description: AI tutor adversarial workflow
+  - name: ingest
+    description: Document ingestion
+  - name: tts
+    description: Text-to-speech
+  - name: mastery
+    description: Student mastery tracking
+  - name: revision
+    description: Spaced repetition revision queue
+  - name: explain
+    description: Topic explanation and syllabus support
+  - name: study-plan
+    description: Personalized study plan generation
+  - name: auth
+    description: Authentication and subscription management
+  - name: payment
+    description: Payment and checkout session handling
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /gemini/conversations:
+    get:
+      operationId: listGeminiConversations
+      tags: [gemini]
+      summary: List all conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeminiConversation"
+    post:
+      operationId: createGeminiConversation
+      tags: [gemini]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGeminiConversationBody"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiConversation"
+  /gemini/conversations/{id}:
+    get:
+      operationId: getGeminiConversation
+      tags: [gemini]
+      summary: Get conversation with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiConversationWithMessages"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+    delete:
+      operationId: deleteGeminiConversation
+      tags: [gemini]
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+  /gemini/conversations/{id}/messages:
+    get:
+      operationId: listGeminiMessages
+      tags: [gemini]
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeminiMessage"
+    post:
+      operationId: sendGeminiMessage
+      tags: [gemini]
+      summary: Send a message and receive an AI response (SSE stream)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendGeminiMessageBody"
+      responses:
+        "200":
+          description: SSE stream of assistant response chunks
+          content:
+            text/event-stream: {}
+  /gemini/generate-image:
+    post:
+      operationId: generateGeminiImage
+      tags: [gemini]
+      summary: Generate an image from a text prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateGeminiImageBody"
+      responses:
+        "200":
+          description: Generated image data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateGeminiImageResponse"
+
+  /tutor/practice:
+    post:
+      operationId: generatePractice
+      tags: [tutor]
+      summary: Generate practice questions from tutor response context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeneratePracticeBody"
+      responses:
+        "200":
+          description: Practice questions output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PracticeResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /tutor/diagnostic:
+    post:
+      operationId: runDiagnostic
+      tags: [tutor]
+      summary: Run trace-back diagnostic evaluation on a student's answer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunDiagnosticBody"
+      responses:
+        "200":
+          description: Diagnostic evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /tutor/invoke:
+    post:
+      operationId: invokeTutor
+      tags: [tutor]
+      summary: Invoke the adversarial AI tutor workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvokeTutorBody"
+      responses:
+        "200":
+          description: Tutor response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /explain/topic:
+    post:
+      operationId: explainTopic
+      tags: [explain]
+      summary: Get a detailed explanation for a syllabus topic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainTopicBody"
+      responses:
+        "200":
+          description: Topic explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExplainTopicResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /study-plan:
+    post:
+      operationId: generateStudyPlan
+      tags: [study-plan]
+      summary: Generate a personalized study plan for an exam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudyPlanRequest"
+      responses:
+        "200":
+          description: Study plan data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyPlanResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /auth/login:
+    post:
+      operationId: authLogin
+      tags: [auth]
+      summary: Authenticate a user and obtain a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginBody"
+      responses:
+        "200":
+          description: User session data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /auth/upgrade:
+    post:
+      operationId: upgradePlan
+      tags: [auth]
+      summary: Upgrade the user's plan tier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradePlanBody"
+      responses:
+        "200":
+          description: Updated user session data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /payment/checkout-session:
+    post:
+      operationId: createCheckoutSession
+      tags: [payment]
+      summary: Create a checkout session for upgrading a plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutSessionBody"
+      responses:
+        "200":
+          description: Payment session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSessionResponse"
+        "400":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /ingest/pdf:
+    post:
+      operationId: uploadPdf
+      tags: [ingest]
+      summary: Upload and parse a PDF syllabus document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                examType:
+                  type: string
+              required:
+                - file
+                - examType
+      responses:
+        "200":
+          description: Parsed PDF result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadPdfResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /tts/synthesize:
+    post:
+      operationId: synthesizeSpeech
+      tags: [tts]
+      summary: Convert text to speech audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SynthesizeSpeechBody"
+      responses:
+        "200":
+          description: Audio data base64 encoded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SynthesizeSpeechResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
+  /mastery:
+    get:
+      operationId: getMasteryMap
+      tags: [mastery]
+      summary: Get mastery map for a student
+      parameters:
+        - name: examType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Mastery entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MasteryEntry"
+    post:
+      operationId: updateMastery
+      tags: [mastery]
+      summary: Update mastery score for a topic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMasteryBody"
+      responses:
+        "200":
+          description: Updated mastery entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MasteryEntry"
+
+  /mastery/stats:
+    get:
+      operationId: getMasteryStats
+      tags: [mastery]
+      summary: Get aggregated mastery statistics
+      parameters:
+        - name: examType
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Mastery stats per subject
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MasteryStats"
+
+  /revision:
+    get:
+      operationId: getRevisionQueue
+      tags: [revision]
+      summary: Get topics due for revision
+      parameters:
+        - name: examType
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Revision queue entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevisionEntry"
+    post:
+      operationId: addToRevisionQueue
+      tags: [revision]
+      summary: Add a topic to revision queue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddRevisionBody"
+      responses:
+        "200":
+          description: Created revision entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevisionEntry"
+
+  /revision/{id}/complete:
+    post:
+      operationId: completeRevision
+      tags: [revision]
+      summary: Mark a revision as complete and reschedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRevisionBody"
+      responses:
+        "200":
+          description: Updated revision entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevisionEntry"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    GeminiConversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - createdAt
+    GeminiMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - role
+        - content
+        - createdAt
+    CreateGeminiConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+      required:
+        - title
+    SendGeminiMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+    GeminiConversationWithMessages:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeminiMessage"
+      required:
+        - id
+        - title
+        - createdAt
+        - messages
+    GenerateGeminiImageBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+      required:
+        - prompt
+    GenerateGeminiImageResponse:
+      type: object
+      properties:
+        b64_json:
+          type: string
+        mimeType:
+          type: string
+      required:
+        - b64_json
+        - mimeType
+    GeminiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    InvokeTutorBody:
+      type: object
+      properties:
+        userInput:
+          type: string
+        targetExam:
+          type: string
+        subject:
+          type: string
+        pedagogyStyle:
+          type: string
+          enum: [hinglish, english, mnemonic, simplified, standard, abstract]
+        studentAnswer:
+          type: string
+        questionMode:
+          type: boolean
+        conversationId:
+          type: integer
+        sessionToken:
+          type: string
+          description: Token returned from /ingest/pdf to inject extracted document context
+      required:
+        - userInput
+        - targetExam
+
+    TutorResponse:
+      type: object
+      properties:
+        response:
+          type: string
+        cacheHit:
+          type: boolean
+        gradingPassed:
+          type: boolean
+        mnemonics:
+          type: array
+          items:
+            type: string
+        weakTopics:
+          type: array
+          items:
+            type: string
+        revisionSuggestions:
+          type: array
+          items:
+            type: string
+        conversationId:
+          type: integer
+        messageId:
+          type: integer
+      required:
+        - response
+        - cacheHit
+        - gradingPassed
+
+    UploadPdfResponse:
+      type: object
+      properties:
+        chunks:
+          type: integer
+        topics:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+        sessionToken:
+          type: string
+          description: UUID token to pass to /tutor/invoke so the LLM receives the extracted document as context
+        charCount:
+          type: integer
+        pageCount:
+          type: integer
+      required:
+        - chunks
+        - topics
+        - message
+        - sessionToken
+
+    SynthesizeSpeechBody:
+      type: object
+      properties:
+        text:
+          type: string
+        language:
+          type: string
+          enum: [english, hindi, hinglish]
+      required:
+        - text
+        - language
+
+    SynthesizeSpeechResponse:
+      type: object
+      properties:
+        audioBase64:
+          type: string
+        mimeType:
+          type: string
+        voice:
+          type: string
+      required:
+        - audioBase64
+        - mimeType
+        - voice
+
+    MasteryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        topic:
+          type: string
+        subject:
+          type: string
+        examType:
+          type: string
+        score:
+          type: integer
+        lastAttempted:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - topic
+        - subject
+        - examType
+        - score
+        - attempts
+        - createdAt
+
+    UpdateMasteryBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        subject:
+          type: string
+        examType:
+          type: string
+        score:
+          type: integer
+        passed:
+          type: boolean
+      required:
+        - topic
+        - subject
+        - examType
+        - score
+        - passed
+
+    MasteryStats:
+      type: object
+      properties:
+        subject:
+          type: string
+        examType:
+          type: string
+        averageScore:
+          type: number
+        totalTopics:
+          type: integer
+        masteredTopics:
+          type: integer
+        weakTopics:
+          type: integer
+      required:
+        - subject
+        - examType
+        - averageScore
+        - totalTopics
+        - masteredTopics
+        - weakTopics
+
+    RevisionEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        topic:
+          type: string
+        subject:
+          type: string
+        examType:
+          type: string
+        score:
+          type: integer
+        nextReviewAt:
+          type: string
+          format: date-time
+        intervalDays:
+          type: integer
+        failedCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - topic
+        - subject
+        - examType
+        - score
+        - nextReviewAt
+        - intervalDays
+        - failedCount
+        - createdAt
+
+    AddRevisionBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        subject:
+          type: string
+        examType:
+          type: string
+        score:
+          type: integer
+      required:
+        - topic
+        - subject
+        - examType
+        - score
+
+    ExplainTopicBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        subtopic:
+          type: string
+        subject:
+          type: string
+        examType:
+          type: string
+          default: BSC_BIOTECH_PART1
+        depth:
+          type: string
+          enum: [basic, detailed, exam-focused]
+          default: detailed
+        pedagogyStyle:
+          type: string
+          enum: [english, hinglish, mnemonic]
+          default: english
+      required:
+        - topic
+
+    ExplainTopicResponse:
+      type: object
+      properties:
+        topic:
+          type: string
+        explanation:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        relatedTopics:
+          type: array
+          items:
+            type: string
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        mnemonics:
+          type: array
+          items:
+            type: string
+      required:
+        - topic
+        - explanation
+        - keyPoints
+        - relatedTopics
+        - difficulty
+
+    StudyPlanRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+          default: Biotechnology
+        examType:
+          type: string
+          default: BSC_BIOTECH_PART1
+        duration:
+          type: integer
+          default: 30
+        dailyHours:
+          type: integer
+          default: 4
+        currentLevel:
+          type: string
+          enum: [beginner, intermediate, advanced]
+          default: beginner
+        weakTopics:
+          type: array
+          items:
+            type: string
+        examDate:
+          type: string
+          format: date
+      required:
+        - duration
+        - dailyHours
+        - currentLevel
+
+    StudyPlanResponse:
+      type: object
+      properties:
+        subject:
+          type: string
+        duration:
+          type: integer
+        dailyHours:
+          type: integer
+        totalTopics:
+          type: integer
+        studyPlan:
+          type: array
+          items:
+            type: object
+            properties:
+              week:
+                type: integer
+              day:
+                type: integer
+              date:
+                type: string
+                format: date
+              topics:
+                type: array
+                items:
+                  type: string
+              estimatedHours:
+                type: number
+              focus:
+                type: string
+              objectives:
+                type: array
+                items:
+                  type: string
+            required:
+              - week
+              - day
+              - date
+              - topics
+              - estimatedHours
+              - focus
+              - objectives
+        revisionSchedule:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              topics:
+                type: array
+                items:
+                  type: string
+              type:
+                type: string
+                enum: [quick, comprehensive, practice]
+            required:
+              - date
+              - topics
+              - type
+        tips:
+          type: array
+          items:
+            type: string
+        milestones:
+          type: array
+          items:
+            type: string
+      required:
+        - subject
+        - duration
+        - dailyHours
+        - totalTopics
+        - studyPlan
+        - revisionSchedule
+        - tips
+        - milestones
+
+    AuthLoginBody:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, educator, parent]
+          default: student
+        tier:
+          type: string
+          enum: [free, pro, pro_plus, developer]
+          default: free
+      required: []
+
+    UpgradePlanBody:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [free, pro, pro_plus, developer]
+      required:
+        - tier
+
+    CheckoutSessionBody:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [free, pro, pro_plus, developer]
+        successUrl:
+          type: string
+          format: uri
+        cancelUrl:
+          type: string
+          format: uri
+      required:
+        - tier
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        sessionToken:
+          type: string
+      required:
+        - user
+
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [free, pro, pro_plus, developer]
+        sessionId:
+          type: string
+        checkoutUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+      required:
+        - tier
+        - sessionId
+        - checkoutUrl
+        - status
+
+    User:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, educator, parent]
+        tier:
+          type: string
+          enum: [free, pro, pro_plus, developer]
+        entitlements:
+          $ref: "#/components/schemas/Entitlements"
+      required:
+        - name
+        - role
+        - tier
+        - entitlements
+
+    Entitlements:
+      type: object
+      properties:
+        can_use_pdf:
+          type: boolean
+        can_view_diagnostics:
+          type: boolean
+        can_use_practice:
+          type: boolean
+        can_use_advanced_models:
+          type: boolean
+        can_use_hindi:
+          type: boolean
+        can_use_abstract:
+          type: boolean
+        can_access_dashboard:
+          type: boolean
+        can_multi_model:
+          type: boolean
+        can_export_sessions:
+          type: boolean
+        can_custom_prompt:
+          type: boolean
+        can_bulk_pdf:
+          type: boolean
+        can_dev_panel:
+          type: boolean
+        query_limit:
+          type: integer
+      required:
+        - can_use_pdf
+        - can_view_diagnostics
+        - can_use_practice
+        - can_use_advanced_models
+        - can_use_hindi
+        - can_use_abstract
+        - can_access_dashboard
+        - can_multi_model
+        - can_export_sessions
+        - can_custom_prompt
+        - can_bulk_pdf
+        - can_dev_panel
+        - query_limit
+
+    CompleteRevisionBody:
+      type: object
+      properties:
+        passed:
+          type: boolean
+        score:
+          type: integer
+      required:
+        - passed
+        - score
+
+    GeneratePracticeBody:
+      type: object
+      properties:
+        context:
+          type: string
+        targetExam:
+          type: string
+        language:
+          type: string
+        model:
+          type: string
+      required:
+        - context
+        - targetExam
+
+    PracticeResponse:
+      type: object
+      properties:
+        questions:
+          type: string
+      required:
+        - questions
+
+    RunDiagnosticBody:
+      type: object
+      properties:
+        studentAnswer:
+          type: string
+        reference:
+          type: string
+        targetExam:
+          type: string
+        language:
+          type: string
+        model:
+          type: string
+      required:
+        - studentAnswer
+        - reference
+        - targetExam
+
+    DiagnosticResponse:
+      type: object
+      properties:
+        evaluation:
+          type: string
+        score:
+          type: number
+      required:
+        - evaluation
+        - score

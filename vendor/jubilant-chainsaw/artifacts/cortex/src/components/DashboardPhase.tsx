@@ -1,0 +1,550 @@
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  useGetMasteryMap,
+  useGetMasteryStats,
+  useGetRevisionQueue,
+  useCompleteRevision,
+  useStudyPlan,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetRevisionQueueQueryKey } from "@workspace/api-client-react";
+import { useAppStore } from "@/store/appStore";
+
+function ScoreBar({ score }: { score: number }) {
+  const pct = Math.min(100, Math.round(score));
+  const color = score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <div className="flex-1 h-1.5 bg-[hsl(var(--border-c))] rounded-full overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="h-full rounded-full"
+          style={{ background: color }}
+        />
+      </div>
+      <span className="text-xs font-mono w-8 text-right" style={{ color }}>
+        {score}
+      </span>
+    </div>
+  );
+}
+
+function scoreColorClass(score: number) {
+  if (score >= 80) return "border-green-500/30 text-green-400";
+  if (score >= 50) return "border-yellow-500/30 text-yellow-400";
+  return "border-red-500/30 text-red-400";
+}
+
+function StatCards() {
+  const { data: statsArr, isLoading } = useGetMasteryStats();
+
+  const totals = (statsArr ?? []).reduce(
+    (acc, s) => ({
+      totalTopics: acc.totalTopics + s.totalTopics,
+      masteredTopics: acc.masteredTopics + s.masteredTopics,
+      avgScore: acc.avgScore + s.averageScore,
+      count: acc.count + 1,
+    }),
+    { totalTopics: 0, masteredTopics: 0, avgScore: 0, count: 0 }
+  );
+  const avgScore = totals.count > 0 ? Math.round(totals.avgScore / totals.count) : 0;
+
+  const cards = [
+    { label: "Total Topics", value: isLoading ? "—" : totals.totalTopics, icon: "📚", color: "text-blue-400" },
+    { label: "Mastered", value: isLoading ? "—" : totals.masteredTopics, icon: "✅", color: "text-green-400" },
+    { label: "Avg Score", value: isLoading ? "—" : `${avgScore}%`, icon: "📊", color: "text-accent" },
+    { label: "Subjects", value: isLoading ? "—" : (statsArr?.length ?? 0), icon: "🎯", color: "text-purple-400" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {cards.map((card, i) => (
+        <motion.div
+          key={card.label}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.06 }}
+          className="glass p-4 text-center"
+        >
+          <div className="text-2xl mb-1">{card.icon}</div>
+          <div className={`text-xl font-bold font-mono ${card.color}`}>{card.value}</div>
+          <div className="text-xs text-muted mt-0.5">{card.label}</div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+type MasteryTab = "map" | "stats";
+
+function MasteryPanel() {
+  const [tab, setTab] = useState<MasteryTab>("map");
+  const [examFilter, setExamFilter] = useState("all");
+  const { data: entries, isLoading: mapLoading } = useGetMasteryMap(
+    examFilter !== "all" ? { examType: examFilter } : {}
+  );
+  const { data: statsArr, isLoading: statsLoading } = useGetMasteryStats();
+
+  const grouped = (entries ?? []).reduce<Record<string, typeof entries>>((acc, entry) => {
+    const key = entry.subject ?? "Other";
+    if (!acc[key]) acc[key] = [];
+    acc[key]!.push(entry);
+    return acc;
+  }, {});
+
+  const EXAMS = ["all", "NEET", "JEE", "UPSC", "CAT", "GATE"];
+
+  return (
+    <div className="glass p-5 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-xs font-mono text-muted uppercase tracking-widest">Mastery Map</p>
+        <div className="flex gap-1">
+          {(["map", "stats"] as MasteryTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-1 rounded-lg text-xs font-mono transition-all ${
+                tab === t ? "bg-blue-500 text-white" : "text-muted hover:text-text"
+              }`}
+            >
+              {t === "map" ? "Topic Map" : "By Subject"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "map" && (
+        <>
+          <div className="flex gap-1 flex-wrap">
+            {EXAMS.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setExamFilter(ex)}
+                className={`px-2 py-0.5 rounded text-xs font-mono border transition-all ${
+                  examFilter === ex
+                    ? "bg-blue-500/20 border-blue-500/50 text-accent"
+                    : "border-[hsl(var(--border-c))] text-muted hover:text-text"
+                }`}
+              >
+                {ex === "all" ? "All" : ex}
+              </button>
+            ))}
+          </div>
+          {mapLoading ? (
+            <p className="text-muted text-xs">Loading…</p>
+          ) : !entries?.length ? (
+            <p className="text-muted text-xs italic">No mastery data yet — run a diagnostic to begin tracking.</p>
+          ) : (
+            <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+              {Object.entries(grouped).map(([subj, items]) => (
+                <div key={subj}>
+                  <p className="text-xs font-mono text-muted uppercase tracking-widest mb-2">{subj}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {items?.map((entry) => (
+                      <motion.div
+                        key={entry.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`rounded-lg border px-3 py-2 text-xs flex flex-col gap-0.5 ${scoreColorClass(entry.score)}`}
+                        style={{ background: "rgba(255,255,255,0.03)" }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold font-mono">{entry.score}%</span>
+                          <span className="text-[10px] opacity-60">{entry.attempts}×</span>
+                        </div>
+                        <span className="text-[11px] leading-tight opacity-80 line-clamp-2">{entry.topic}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "stats" && (
+        <>
+          {statsLoading ? (
+            <p className="text-muted text-xs">Loading…</p>
+          ) : !statsArr?.length ? (
+            <p className="text-muted text-xs italic">No subject stats yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {statsArr.map((s, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-text font-medium">{s.subject} · <span className="text-muted">{s.examType}</span></p>
+                    <span className="text-xs text-muted font-mono">{s.masteredTopics}/{s.totalTopics} mastered</span>
+                  </div>
+                  <ScoreBar score={Math.round(s.averageScore)} />
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function formatDue(dateStr: string) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff <= 0) return "Due now";
+  if (diff === 1) return "Tomorrow";
+  return `In ${diff}d`;
+}
+
+function RevisionPanel() {
+  const [tab, setTab] = useState<"due" | "upcoming">("due");
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch } = useGetRevisionQueue();
+  const completeRevision = useCompleteRevision({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetRevisionQueueQueryKey() });
+        refetch();
+      },
+    },
+  });
+
+  const now = new Date();
+  const dueItems = (data ?? []).filter((i) => new Date(i.nextReviewAt) <= now);
+  const upcomingItems = (data ?? []).filter((i) => new Date(i.nextReviewAt) > now);
+  const items = tab === "due" ? dueItems : upcomingItems;
+
+  return (
+    <div className="glass p-5 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-mono text-muted uppercase tracking-widest">Revision Queue</p>
+        <div className="flex gap-1">
+          {(["due", "upcoming"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-2 py-0.5 rounded text-xs font-mono transition-all ${
+                tab === t ? "bg-blue-500 text-white" : "text-muted hover:text-text"
+              }`}
+            >
+              {t === "due" ? `Due (${dueItems.length})` : `Soon (${upcomingItems.length})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-muted text-xs">Loading…</p>
+      ) : !items.length ? (
+        <p className="text-muted text-xs italic">
+          {tab === "due" ? "No revisions due — great work!" : "No upcoming revisions queued."}
+        </p>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <AnimatePresence>
+            {items.map((item, i) => {
+              const isDue = new Date(item.nextReviewAt) <= now;
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, delay: i * 0.03 }}
+                  className="flex items-center justify-between gap-3 py-2 border-b border-[hsl(var(--border-c))] last:border-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-text truncate">{item.topic}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-muted font-mono">{item.examType}</span>
+                      <span className="text-[10px] text-muted">·</span>
+                      <span className={`text-[10px] font-mono ${isDue ? "text-red-400" : "text-muted"}`}>
+                        {formatDue(item.nextReviewAt)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`text-xs font-mono ${item.score < 50 ? "text-red-400" : "text-yellow-400"}`}>
+                      {item.score}%
+                    </span>
+                    {isDue && (
+                      <>
+                        <button
+                          onClick={() => completeRevision.mutate({ id: item.id, data: { passed: false, score: 20 } })}
+                          disabled={completeRevision.isPending}
+                          className="text-red-400/60 hover:text-red-400 transition-colors text-xs px-1.5 py-0.5 rounded border border-red-500/20 hover:border-red-500/40"
+                          title="Missed"
+                        >
+                          ✗
+                        </button>
+                        <button
+                          onClick={() => completeRevision.mutate({ id: item.id, data: { passed: true, score: 80 } })}
+                          disabled={completeRevision.isPending}
+                          className="text-green-400/60 hover:text-green-400 transition-colors text-xs px-1.5 py-0.5 rounded border border-green-500/20 hover:border-green-500/40"
+                          title="Got it"
+                        >
+                          ✓
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface HistoryPanelProps {
+  onReplay: (query: string) => void;
+}
+
+function formatStudyPlanOutput(plan: any) {
+  const lines: string[] = [];
+  lines.push(`### ${plan.subject} — ${plan.duration}-day plan (${plan.dailyHours}h/day)`);
+  lines.push(`**Topics:** ${plan.totalTopics}`);
+  lines.push("");
+
+  if (plan.studyPlan?.length) {
+    lines.push("#### Daily Schedule");
+    plan.studyPlan.forEach((item: any) => {
+      lines.push(`- **Day ${item.day}** (${item.date}) — ${item.topics.join(", ")} — _${item.focus}_`);
+    });
+    lines.push("");
+  }
+
+  if (plan.revisionSchedule?.length) {
+    lines.push("#### Revision Sessions");
+    plan.revisionSchedule.forEach((item: any) => {
+      lines.push(`- ${item.date}: ${item.topics.join(", ")} (${item.type})`);
+    });
+    lines.push("");
+  }
+
+  if (plan.tips?.length) {
+    lines.push("#### Tips");
+    plan.tips.forEach((tip: string) => lines.push(`- ${tip}`));
+    lines.push("");
+  }
+
+  if (plan.milestones?.length) {
+    lines.push("#### Milestones");
+    plan.milestones.forEach((milestone: string) => lines.push(`- ${milestone}`));
+  }
+
+  return lines.join("\n");
+}
+
+function StudyPlanPanel() {
+  const [subject, setSubject] = useState("Biotechnology");
+  const [duration, setDuration] = useState(30);
+  const [dailyHours, setDailyHours] = useState(4);
+  const [currentLevel, setCurrentLevel] = useState<"beginner" | "intermediate" | "advanced">("beginner");
+  const [weakTopics, setWeakTopics] = useState("");
+  const [examDate, setExamDate] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const studyPlanMutation = useStudyPlan({
+    mutation: {
+      onSuccess: (data) => setResult(formatStudyPlanOutput(data)),
+    },
+  });
+
+  const handleSubmit = () => {
+    studyPlanMutation.mutate({
+      data: {
+        subject,
+        examType: subject,
+        duration,
+        dailyHours,
+        currentLevel,
+        weakTopics: weakTopics
+          .split(",")
+          .map((topic) => topic.trim())
+          .filter(Boolean),
+        examDate: examDate || undefined,
+      },
+    });
+  };
+
+  return (
+    <div className="glass p-5 space-y-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs font-mono text-muted uppercase tracking-widest">Study Plan</p>
+          <h3 className="text-sm font-semibold text-text">Personalized 30-day learning plan</h3>
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={studyPlanMutation.isPending}
+          className="btn-primary text-sm"
+        >
+          {studyPlanMutation.isPending ? "Generating…" : "Generate Plan"}
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs text-muted">
+          Subject
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+          />
+        </label>
+        <label className="text-xs text-muted">
+          Duration (days)
+          <input
+            type="number"
+            min={7}
+            max={90}
+            value={duration}
+            onChange={(e) => setDuration(Number(e.target.value))}
+            className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+          />
+        </label>
+        <label className="text-xs text-muted">
+          Daily hours
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={dailyHours}
+            onChange={(e) => setDailyHours(Number(e.target.value))}
+            className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+          />
+        </label>
+        <label className="text-xs text-muted">
+          Current level
+          <select
+            value={currentLevel}
+            onChange={(e) => setCurrentLevel(e.target.value as "beginner" | "intermediate" | "advanced")}
+            className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+          >
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </label>
+      </div>
+
+      <label className="text-xs text-muted block">
+        Focus topics (comma-separated)
+        <input
+          value={weakTopics}
+          onChange={(e) => setWeakTopics(e.target.value)}
+          placeholder="e.g. Genetics, Biochemistry"
+          className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+        />
+      </label>
+
+      <label className="text-xs text-muted block">
+        Target exam date
+        <input
+          type="date"
+          value={examDate}
+          onChange={(e) => setExamDate(e.target.value)}
+          className="mt-2 block w-full glass rounded-xl px-3 py-2 text-sm text-text"
+        />
+      </label>
+
+      {result && (
+        <div className="glass p-4">
+          <p className="text-xs font-mono text-muted uppercase tracking-widest mb-3">Study plan output</p>
+          <pre className="text-xs text-text whitespace-pre-wrap break-words font-sans">{result}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryPanel({ onReplay }: HistoryPanelProps) {
+  const { agentResult, lastQuery, params } = useAppStore();
+
+  if (!agentResult && !lastQuery) {
+    return (
+      <div className="glass p-5">
+        <p className="text-xs font-mono text-muted uppercase tracking-widest mb-3">Session History</p>
+        <p className="text-muted text-xs italic">No sessions yet — your tutoring history will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass p-5 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-mono text-muted uppercase tracking-widest">Current Session</p>
+        <span className="tag">1 session</span>
+      </div>
+      {lastQuery && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 rounded-xl bg-white/4 border border-[hsl(var(--border-c))] hover:border-blue-500/30
+                     transition-all cursor-pointer group"
+          onClick={() => onReplay(lastQuery)}
+        >
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <span className="tag">{params.target_exam}</span>
+            <span className="text-xs text-muted font-mono shrink-0">Just now</span>
+          </div>
+          <p className="text-xs text-text line-clamp-1 group-hover:text-accent transition-colors">{lastQuery}</p>
+          {agentResult?.final_output && (
+            <p className="text-xs text-muted mt-1 line-clamp-2 leading-relaxed">
+              {agentResult.final_output.slice(0, 120)}…
+            </p>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+export default function DashboardPhase({ onReplay }: { onReplay: (query: string) => void }) {
+  const { setPhase } = useAppStore();
+
+  return (
+    <div className="min-h-screen px-4 py-10 max-w-3xl mx-auto space-y-4 bg-[hsl(var(--void))]">
+      <div className="mb-4">
+        <p className="tag mb-2">PERSISTENCE LAYER</p>
+        <h2 className="text-2xl font-bold text-text">Learning Dashboard</h2>
+        <p className="text-muted text-sm mt-1">Session history · Mastery scores · Revision queue</p>
+      </div>
+
+      <StatCards />
+
+      <MasteryPanel />
+      <RevisionPanel />
+      <StudyPlanPanel />
+
+      <HistoryPanel onReplay={onReplay} />
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="glass p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+      >
+        <div>
+          <p className="font-semibold text-text text-sm">Ready for another session?</p>
+          <p className="text-xs text-muted mt-0.5">Ask the AI tutor any question with adversarial accuracy checking.</p>
+        </div>
+        <button onClick={() => setPhase("agent")} className="btn-primary whitespace-nowrap">
+          New Query →
+        </button>
+      </motion.div>
+    </div>
+  );
+}
